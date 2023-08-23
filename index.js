@@ -14,10 +14,14 @@ const items = [
   { id: 3, name: 'Item 3' }
 ];
 
+
+let results = []
+
 function checkEmail(email) {
   return new Promise(async (resolve) => {
     const mxhosts = await promises.resolveMx(email.split("@")[1]);
     console.log(mxhosts);
+    results.push(mxhosts)
     if (mxhosts.length === 0) {
       resolve("invalid");
     } else {
@@ -46,6 +50,7 @@ function checkEmail(email) {
 
           socket.on("data", (data) => {
             console.log(data, "data");
+            results.push(data.toString())
             const endSock = new Date().getTime();
             const diffSock = (endSock - startSock) / 1000;
 
@@ -63,6 +68,7 @@ function checkEmail(email) {
               socket.write(`HELO \r\n`);
               // socket.write(`HELO \r\n`);
               socket.once("data", (data1) => {
+                results.push(data1.toString())
                 console.log(data1.toString(), "data1");
                 if (
                   data1.toString().startsWith("220") ||
@@ -71,10 +77,12 @@ function checkEmail(email) {
                   socket.write(`mail from : <rishikeshkeshari47@outlook.com> \r\n`);
                   console.log(socket);
                   socket.once("data", (data2) => {
+                    results.push(data2.toString())
                     console.log(data2.toString(), "data2");
                     socket.write(`rcpt to: <${email}> \r\n`);
                     socket.once("data", (data3) => {
                       console.log("in data 3");
+                      results.push(data3.toString())
                       console.log(data3.toString(), "data3");
                       if (!data3.toString().includes("550")) {
                         if (data3.toString().includes("2.1.5")) {
@@ -114,7 +122,7 @@ const email = "rishikeshkeshari47@outlook.com";
 app.get('/items', (req, res) => {
     checkEmail(email).then((result) => {
         console.log(`Email validity: ${result}`);
-        res.json(result);
+        res.json(results);
       });
   
 });
