@@ -5,7 +5,7 @@ import net from "net";
 import tls from "tls";
 
 const app = express();
-const port = 4000;
+const ports = 4000;
 
 // Sample data for demonstration
 const items = [
@@ -17,117 +17,96 @@ const items = [
 
 let results = []
 
-function checkEmail(email) {
-  return new Promise(async (resolve) => {
-    const mxhosts = await promises.resolveMx(email.split("@")[1]);
-    console.log(mxhosts);
-    results.push(mxhosts)
-    if (mxhosts.length === 0) {
-      resolve("invalid");
-    } else {
-      let valid = "invalid";
-      const mainHostSet = new Set();
-      const finalHostArray = [];
+function checkEmailWithAuth(email, host, port, username, password, from) {
+    return new Promise((resolve) => {
+        const smtpOptions = {
+            host: host,
+            port: port,
+            timeout: 15000, // 15 seconds
+        };
+        const smtpSocket = net.connect(smtpOptions, () => {
+            console.log(smtpOptions,"here")
+            sendCommand(smtpSocket, '', () => {
+                console.log("here")
+                sendCommand(smtpSocket, `EHLO`, () => {
+                    console.log("here 1")
+                    sendCommand(smtpSocket,"STARTTLS",async () => {
+                        console.log("here 2")
+                        const tlsSocket = tls.connect({
+                            socket: smtpSocket,
+                           
+                        });
+                        console.log("here 3")
+                        tlsSocket.once('secureConnect', () => {
+                            console.log("here 4")
+                            sendCommand(tlsSocket, `EHLO ${host}`, () => {
+                                sendCommand(tlsSocket, 'AUTH LOGIN', () => {
+                                    sendCommand(tlsSocket, Buffer.from(username).toString('base64'), () => {
+                                        sendCommand(tlsSocket, Buffer.from(password).toString('base64'), () => {
+                                            sendCommand(tlsSocket, `MAIL FROM:<${from}>`, () => {
+                                                sendCommand(tlsSocket, `RCPT TO:<${email}>`, (response) => {
+                                                    if (response.includes('550')) {
+                                                        resolve('invalid');
+                                                    } else {
+                                                        resolve('valid');
+                                                    }
 
-      mxhosts.forEach((mxhost) => {
-        const hostParts = mxhost.exchange.split(".");
-        const bottomHostName = `${hostParts[hostParts.length - 2]}.${
-          hostParts[hostParts.length - 1]
-        }`;
-
-        if (!mainHostSet.has(bottomHostName)) {
-          mainHostSet.add(bottomHostName);
-          finalHostArray.push(mxhost.exchange);
-        }
-      });
-
-      for (const host of finalHostArray) {
-        const socket = new Socket();
-
-        socket.connect(25, host, async () => {
-          const startSock = new Date().getTime();
-          socket.setTimeout(10000);
-
-          socket.on("data", (data) => {
-            console.log(data, "data");
-            results.push(data.toString())
-            const endSock = new Date().getTime();
-            const diffSock = (endSock - startSock) / 1000;
-
-            if (diffSock >= 10) {
-              valid = "Accept All";
-              socket.end();
-              resolve(valid);
-            }
-
-            if (
-              data.toString().startsWith("220") ||
-              data.toString().startsWith("554")
-            ) {
-              // socket.write(`HELO ${email.split('@')[1]} \r\n`);
-              socket.write(`HELO \r\n`);
-              // socket.write(`HELO \r\n`);
-              socket.once("data", (data1) => {
-                results.push(data1.toString())
-                console.log(data1.toString(), "data1");
-                if (
-                  data1.toString().startsWith("220") ||
-                  data1.toString().startsWith("250")
-                ) {
-                  socket.write(`mail from : <rishikeshkeshari47@outlook.com> \r\n`);
-                  console.log(socket);
-                  socket.once("data", (data2) => {
-                    results.push(data2.toString())
-                    console.log(data2.toString(), "data2");
-                    socket.write(`rcpt to: <${email}> \r\n`);
-                    socket.once("data", (data3) => {
-                      console.log("in data 3");
-                      results.push(data3.toString())
-                      console.log(data3.toString(), "data3");
-                      if (!data3.toString().includes("550")) {
-                        if (data3.toString().includes("2.1.5")) {
-                          valid = "valid";
-                        } else {
-                          valid = "Accept All";
-                        }
-                      }
-
-                      socket.end();
-                      resolve(valid);
+                                                    sendCommand(tlsSocket, 'QUIT', () => {
+                                                        tlsSocket.end();
+                                                    });
+                                                });
+                                            });
+                                        });
+                                    });
+                                });
+                            });
+                        });
                     });
-                  });
-                }
-              });
-            }
-          });
+                });
+            });
         });
 
-        socket.on("error", () => {
-          socket.destroy();
+        smtpSocket.on('error', () => {
+            resolve('invalid');
         });
-
-        socket.on("timeout", () => {
-          socket.destroy();
-        });
-      }
-    }
-  });
+    });
 }
 
+function sendCommand(socket, command, callback) {
+    socket.write(command + '\r\n', 'utf8');
+    socket.once('data', (data) => {
+        const response = data.toString();
+        if (callback) {
+            callback(response);
+        }
+    });
+}
+
+// 'smtp.live.com',587,'bXZlcmlmaWVyQGhvdG1haWwuY29t','VGduQ19Rfm8oO3s6','mverifier@hotmail.com'
+
 // Example usage:
-const email = "rishikeshkeshari47@outlook.com";
+const email = 'rishikeshkeshari901@outlook.com';
+const host = 'smtp.office365.com';
+const port = 587;
+const username = "rishikeshkeshari47@outlook.com";
+const password = 'mlqeidmtpuvggscu';
+const from = 'rishikeshkeshari47@outlook.com';
+
+
+
+
 
 
 // Define a route to handle GET requests
 app.get('/items', (req, res) => {
-    checkEmail(email).then((result) => {
+    checkEmailWithAuth(email, host, port, username, password, from).then(result => {
         console.log(`Email validity: ${result}`);
-        res.json(results);
-      });
+        res.json(result)
+    });
   
 });
 
 // Start the server
 app.listen(port, () => {
-  console.log(`Server is listening at http://localhost:${port}`);
+  console.log(`Server is listening at http://localhost:${ports}`);
 });
